@@ -9,7 +9,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 swiftc -O -parse-as-library Tether.swift Reorder.swift -o "$APP/Contents/MacOS/Tether"
 cp Info.plist "$APP/Contents/Info.plist"
-cp Resources/*.png "$APP/Contents/Resources/"
+cp Resources/*.png Resources/Tether.icns "$APP/Contents/Resources/"
 
 # Ad-hoc signature. Enough for Login Items to work locally; not enough to distribute
 # to other people's Macs without them right-click > Open past Gatekeeper.

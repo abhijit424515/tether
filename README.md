@@ -19,7 +19,9 @@ cd persistent-audio-io && ./app/install.sh
 
 That builds Tether and copies it to `/Applications` (or `~/Applications` if that needs an admin you do not have), then launches it. Installing matters for more than tidiness: Spotlight, Raycast and Launchpad do not index build directories, so an app left in `app/build` cannot be found by name. Use `./app/build.sh` alone if you only want to compile.
 
-Tether's waveform icon appears in the menu bar. Click it and a small panel drops down with two tabs, **Microphone** and **Speakers**. Each tab is a numbered list of every device it has seen; drag the rows to set the order you want. The topmost device that is currently connected is the one macOS uses, and it stays that way across disconnects.
+Tether's waveform icon appears in the menu bar, in monochrome — it is a template image, so macOS recolors it for light, dark and highlighted menu bars. The blue gradient original is used for the app icon in Finder, the Dock and Raycast.
+
+Click it and a small panel drops down with two tabs, **Microphone** and **Speakers**. Each tab is a numbered list of every device it has seen; drag the rows to set the order you want. The topmost device that is currently connected is the one macOS uses, and it stays that way across disconnects.
 
 Rows show `in use` for the active device and `not connected` for one that is unplugged — unplugged devices stay in the list so you can position them ahead of time. Right-click one to forget it. Turn on **Open at Login** so it starts with your Mac.
 
@@ -71,7 +73,8 @@ Both the app and the CLI move an older `~/.config/audio-priority.json` to the ne
 | `app/Reorder.swift` | Drag-reorder index and gesture math, kept pure so it can be tested. |
 | `app/build.sh` | `swiftc` + a hand-made `.app` bundle. No Xcode project. |
 | `app/install.sh` | Builds, then copies the bundle to `/Applications` so Spotlight and Raycast can find it. |
-| `app/icon.svg` | Source artwork. `app/make-icon.sh` regenerates the menu bar PNGs (needs `librsvg`). |
+| `app/icon.svg` | Source artwork, blue gradient. `icon-app.svg` and `icon-menubar.svg` are crops of it. |
+| `app/make-icon.sh` | Renders both icons from the SVGs (needs `librsvg`). Output is committed. |
 | `tether` | CLI: edit, validate, apply. |
 | `tether-agent.sh` | The agent. Polls every 2s, switches when the current device is not the best available. |
 | `com.local.tether.plist` | launchd template that keeps the agent running and restarts it at login. |
