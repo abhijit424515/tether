@@ -13,8 +13,8 @@ Two ways to run it: a **menu bar app** (no terminal, no dependencies) or a **CLI
 ## Menu bar app
 
 ```sh
-git clone https://github.com/abhijit424515/persistent-audio-io.git
-cd persistent-audio-io && ./app/install.sh
+git clone https://github.com/abhijit424515/tether.git
+cd tether && ./app/install.sh
 ```
 
 That builds Tether and copies it to `/Applications` (or `~/Applications` if that needs an admin you do not have), then launches it. Installing matters for more than tidiness: Spotlight, Raycast and Launchpad do not index build directories, so an app left in `app/build` cannot be found by name. Use `./app/build.sh` alone if you only want to compile.
@@ -37,8 +37,8 @@ The build is ad-hoc signed, so on another Mac the first launch needs right-click
 
 ```sh
 brew install switchaudio-osx
-git clone https://github.com/abhijit424515/persistent-audio-io.git
-cd persistent-audio-io
+git clone https://github.com/abhijit424515/tether.git
+cd tether
 ln -s "$PWD/tether" /opt/homebrew/bin/tether
 ```
 
