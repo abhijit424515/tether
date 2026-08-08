@@ -13,6 +13,12 @@ Two ways to run it: a **menu bar app** (no terminal, no dependencies) or a **CLI
 ## Menu bar app
 
 ```sh
+brew install --cask abhijit424515/dynamight/tether
+```
+
+Tether is ad-hoc signed rather than notarized by Apple, so the cask clears the quarantine attribute that Homebrew sets on downloads — Gatekeeper only inspects quarantined files, and would otherwise refuse to launch it. That means you are trusting this source instead of Apple's notary service. Everything here is buildable from source if you would rather not:
+
+```sh
 git clone https://github.com/abhijit424515/tether.git
 cd tether && ./app/install.sh
 ```
@@ -78,6 +84,7 @@ Both the app and the CLI move an older `~/.config/audio-priority.json` to the ne
 | `app/InputMeter.swift` | Live microphone level: the audio tap, the smoothing, and the meter view. |
 | `app/build.sh` | `swiftc` + a hand-made `.app` bundle. No Xcode project. |
 | `app/install.sh` | Builds, then copies the bundle to `/Applications` so Spotlight and Raycast can find it. |
+| `app/release.sh` | Stamps a version, zips the bundle, publishes a GitHub release, prints the cask sha256. |
 | `app/icon.svg` | Source artwork, blue gradient. `icon-app.svg` and `icon-menubar.svg` are crops of it. |
 | `app/make-icon.sh` | Renders both icons from the SVGs (needs `librsvg`). Output is committed. |
 | `tether` | CLI: edit, validate, apply. |
