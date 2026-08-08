@@ -7,7 +7,7 @@ APP=build/Tether.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-swiftc -O -parse-as-library Tether.swift Reorder.swift -o "$APP/Contents/MacOS/Tether"
+swiftc -O -parse-as-library Tether.swift Reorder.swift InputMeter.swift -o "$APP/Contents/MacOS/Tether"
 cp Info.plist "$APP/Contents/Info.plist"
 cp Resources/*.png Resources/Tether.icns "$APP/Contents/Resources/"
 

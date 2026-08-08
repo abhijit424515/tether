@@ -13,5 +13,8 @@
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <!-- menu bar only: no Dock icon, no window on launch -->
   <key>LSUIElement</key><true/>
+  <!-- Only for the input level meter on the Microphone tab; Tether never records. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Tether shows the live input level of your microphone.</string>
 </dict>
 </plist>

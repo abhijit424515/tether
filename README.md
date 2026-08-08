@@ -25,6 +25,10 @@ Click it and a small panel drops down with two tabs, **Microphone** and **Speake
 
 Rows show `in use` for the active device and `not connected` for one that is unplugged — unplugged devices stay in the list so you can position them ahead of time. Right-click one to forget it. Turn on **Open at Login** so it starts with your Mac.
 
+A volume slider under the tabs controls whichever device is active in that tab; it is disabled for devices that expose no volume control, such as HDMI outputs and many USB microphones. The Microphone tab also shows a live input level meter.
+
+The meter is the only part of Tether that opens the microphone, so it runs only while the Microphone tab is on screen — not on the Speakers tab, and not while the panel is closed. macOS asks for microphone permission the first time. Because the build is ad-hoc signed, its signature changes on every rebuild, so macOS may ask again after each `install.sh`.
+
 No Dock icon, no window. It talks to CoreAudio directly — no Homebrew, no `switchaudio-osx`. Requires macOS 13 or later.
 
 The build is ad-hoc signed, so on another Mac the first launch needs right-click → Open to get past Gatekeeper.
@@ -71,6 +75,7 @@ Both the app and the CLI move an older `~/.config/audio-priority.json` to the ne
 | --- | --- |
 | `app/Tether.swift` | The whole menu bar app. CoreAudio enumeration and switching, panel, login item. |
 | `app/Reorder.swift` | Drag-reorder index and gesture math, kept pure so it can be tested. |
+| `app/InputMeter.swift` | Live microphone level: the audio tap, the smoothing, and the meter view. |
 | `app/build.sh` | `swiftc` + a hand-made `.app` bundle. No Xcode project. |
 | `app/install.sh` | Builds, then copies the bundle to `/Applications` so Spotlight and Raycast can find it. |
 | `app/icon.svg` | Source artwork, blue gradient. `icon-app.svg` and `icon-menubar.svg` are crops of it. |

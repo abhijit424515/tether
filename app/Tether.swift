@@ -42,9 +42,25 @@ enum Audio {
         var ids = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
         guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),
                                          &addr, 0, nil, &size, &ids) == noErr else { return [] }
-        return ids.filter { channels($0, dir) > 0 }.compactMap { id in
+        return ids.filter { channels($0, dir) > 0 && !isPrivateAggregate($0) }.compactMap { id in
             name(id).map { Device(id: id, name: $0) }
         }
+    }
+
+    /// CoreAudio spins up a private aggregate device — CADefaultDeviceAggregate-<pid>-0 —
+    /// whenever a process opens the default input, which Tether's own level meter does. They
+    /// are real devices with real channels, so they have to be filtered by intent rather than
+    /// by shape. A user's own aggregate from Audio MIDI Setup is not private and stays listed.
+    private static func isPrivateAggregate(_ id: AudioDeviceID) -> Bool {
+        var addr = address(kAudioAggregateDevicePropertyComposition)
+        guard AudioObjectHasProperty(id, &addr) else { return false }
+        var composition: CFDictionary?
+        var size = UInt32(MemoryLayout<CFDictionary?>.size)
+        let status = withUnsafeMutablePointer(to: &composition) {
+            AudioObjectGetPropertyData(id, &addr, 0, nil, &size, $0)
+        }
+        guard status == noErr, let entries = composition as? [String: Any] else { return false }
+        return (entries[kAudioAggregateDeviceIsPrivateKey] as? Int) == 1
     }
 
     private static func channels(_ id: AudioDeviceID, _ dir: Direction) -> Int {
@@ -79,6 +95,41 @@ enum Audio {
         return id
     }
 
+    /// Volume lives on the main element for some devices and on the individual channels for
+    /// others, so every volume call walks main first, then channels 1 and 2.
+    private static let volumeElements: [AudioObjectPropertyElement] = [kAudioObjectPropertyElementMain, 1, 2]
+
+    /// nil when the device exposes no volume control at all — common for digital outputs
+    /// and for many USB microphones, which want their own hardware knob used instead.
+    static func volume(_ id: AudioDeviceID, _ dir: Direction) -> Float? {
+        for element in volumeElements {
+            var addr = address(kAudioDevicePropertyVolumeScalar, dir.scope)
+            addr.mElement = element
+            guard AudioObjectHasProperty(id, &addr) else { continue }
+            var value: Float32 = 0
+            var size = UInt32(MemoryLayout<Float32>.size)
+            if AudioObjectGetPropertyData(id, &addr, 0, nil, &size, &value) == noErr { return value }
+        }
+        return nil
+    }
+
+    static func setVolume(_ value: Float, _ id: AudioDeviceID, _ dir: Direction) {
+        var value = Float32(min(max(value, 0), 1))
+        for element in volumeElements {
+            var addr = address(kAudioDevicePropertyVolumeScalar, dir.scope)
+            addr.mElement = element
+            var settable: DarwinBoolean = false
+            guard AudioObjectHasProperty(id, &addr),
+                  AudioObjectIsPropertySettable(id, &addr, &settable) == noErr,
+                  settable.boolValue,
+                  AudioObjectSetPropertyData(id, &addr, 0, nil,
+                                             UInt32(MemoryLayout<Float32>.size), &value) == noErr
+            else { continue }
+            // The main element covers every channel; only fall through to 1 and 2 without it.
+            if element == kAudioObjectPropertyElementMain { return }
+        }
+    }
+
     @discardableResult
     static func setDefault(_ id: AudioDeviceID, _ dir: Direction) -> Bool {
         var addr = address(dir.defaultSelector)
@@ -99,6 +150,17 @@ enum Config {
     /// The config was called audio-priority.json before the app was named Tether.
     private static let legacyURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".config/audio-priority.json")
+
+    /// Versions before the private-aggregate filter recorded CoreAudio's throwaway
+    /// CADefaultDeviceAggregate-<pid>-0 devices, one per launch. Drop them once; the
+    /// enumeration filter keeps them from coming back.
+    static func pruneScratchDevices() {
+        var lists = load()
+        let cleaned = lists.mapValues { $0.filter { !$0.hasPrefix("CADefaultDeviceAggregate") } }
+        guard cleaned != lists else { return }
+        lists = cleaned
+        save(lists)
+    }
 
     static func migrateLegacy() {
         let fm = FileManager.default
@@ -132,15 +194,20 @@ enum Config {
 final class Model: ObservableObject {
     @Published private(set) var connected: [Direction: [Device]] = [:]
     @Published private(set) var currentID: [Direction: AudioDeviceID] = [:]
+    /// nil for a device with no volume control; the slider is hidden in that case.
+    @Published private(set) var volume: [Direction: Float] = [:]
     @Published var openAtLogin: Bool = SMAppService.mainApp.status == .enabled {
         didSet { setOpenAtLogin(openAtLogin) }
     }
 
     private var lists = Config.load()
     private var timer: Timer?
+    /// While a slider is held, the 2s poll must not write the hardware's value back into it.
+    private var adjusting: Direction?
 
     init() {
         Config.migrateLegacy()
+        Config.pruneScratchDevices()
         refresh()
         // ponytail: 2s poll instead of a CoreAudio property listener. Both work; this one is 1 line.
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
@@ -168,6 +235,16 @@ final class Model: ObservableObject {
         refresh()
     }
 
+    func setVolume(_ dir: Direction, _ value: Float) {
+        volume[dir] = value
+        guard let id = currentID[dir] else { return }
+        Audio.setVolume(value, id, dir)
+    }
+
+    func setAdjusting(_ dir: Direction, _ active: Bool) {
+        adjusting = active ? dir : nil
+    }
+
     func forget(_ dir: Direction, _ name: String) {
         lists[dir]?.removeAll { $0 == name }
         Config.save(lists)
@@ -188,7 +265,11 @@ final class Model: ObservableObject {
                 discovered = true
             }
             apply(dir)
-            currentID[dir] = Audio.current(dir)
+            let id = Audio.current(dir)
+            currentID[dir] = id
+            if adjusting != dir {
+                volume[dir] = id.flatMap { Audio.volume($0, dir) }
+            }
         }
         if discovered { Config.save(lists) }  // this runs every 2s — only write when it changed
     }
@@ -262,6 +343,7 @@ struct PanelView: View {
     @ObservedObject var model: Model
     static let rowHeight: Double = 30
 
+    @StateObject private var meter = InputMeter()
     @State private var tab: Direction = .input
     @State private var dragName: String?
     @State private var dragOffset: Double = 0
@@ -292,6 +374,27 @@ struct PanelView: View {
         return dragOffset - Double(target(in: rows) - from) * Self.rowHeight
     }
 
+    /// Volume of whichever device is active in this tab. Absent for devices that expose no
+    /// volume control, where a dead slider would just look broken.
+    @ViewBuilder
+    private var volumeSlider: some View {
+        HStack(spacing: 8) {
+            Image(systemName: tab == .input ? "mic.fill" : "speaker.wave.2.fill")
+                .foregroundStyle(.secondary)
+                .font(.caption)
+                .frame(width: 14)
+            // A device with no volume control gets a disabled slider rather than a hidden one,
+            // so the panel does not change height when devices switch.
+            Slider(value: Binding(get: { model.volume[tab] ?? 0 },
+                                  set: { model.setVolume(tab, $0) }),
+                   in: 0...1,
+                   onEditingChanged: { model.setAdjusting(tab, $0) })
+                .disabled(model.volume[tab] == nil)
+                .help(model.volume[tab] == nil ? "This device has no volume control" : "")
+        }
+        .frame(height: 20)
+    }
+
     private func dragGesture(for row: Row) -> some Gesture {
         DragGesture(minimumDistance: 3)
             .onChanged { value in
@@ -312,6 +415,8 @@ struct PanelView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
+
+            volumeSlider
 
             Text("Drag to set priority. The top device that is connected wins.")
                 .font(.caption)
@@ -342,6 +447,23 @@ struct PanelView: View {
             .frame(height: 200)
             .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 6))
 
+            if tab == .input {
+                HStack(spacing: 8) {
+                    Text("Input level")
+                        .font(.caption)
+                        .foregroundStyle(meter.denied ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.secondary))
+                    Spacer(minLength: 4)
+                    if meter.denied {
+                        Text("microphone access denied")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    } else {
+                        MeterView(level: meter.level)
+                    }
+                }
+                .frame(height: 14)
+            }
+
             Divider()
 
             HStack {
@@ -354,6 +476,12 @@ struct PanelView: View {
         }
         .padding(12)
         .frame(width: 320)
+        // The mic is open only while its tab is visible — not while the panel is merely open,
+        // and never while the panel is closed.
+        .onAppear { if tab == .input { meter.start() } }
+        .onDisappear { meter.stop() }
+        .onChange(of: tab) { _, new in new == .input ? meter.start() : meter.stop() }
+        .onChange(of: model.currentID[.input]) { _, _ in meter.restart() }
     }
 }
 
