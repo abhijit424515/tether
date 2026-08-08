@@ -1,0 +1,52 @@
+#!/bin/bash
+# pai — edit the audio-priority config, validate it, apply it.
+#   pai            edit + validate + reload the launch agent
+#   pai --check F  validate F only (used by test.sh)
+set -u
+
+SAS=${SAS:-/opt/homebrew/bin/SwitchAudioSource}
+CONF="${AUDIO_PRIORITY_CONF:-$HOME/.config/audio-priority.json}"
+AGENT=com.local.audio-priority
+
+# Valid = object with "input" and "output", each an array of non-empty strings.
+validate() {
+  local err
+  # jq prints a complaint on the first problem it finds, nothing at all when the config is fine.
+  err=$(jq -r '
+    if type != "object" then "top level must be a JSON object"
+    elif (has("input") and has("output") | not) then "needs both \"input\" and \"output\" keys"
+    else
+      [{k:"input", v:.input}, {k:"output", v:.output}] | map(
+        if (.v|type) != "array" then "\(.k) must be an array"
+        elif any(.v[]; type != "string") then "\(.k) must contain only strings"
+        elif any(.v[]; . == "") then "\(.k) must not contain empty strings"
+        else empty end
+      ) | if length > 0 then .[0] else empty end
+    end' "$1" 2>&1) || { echo "not valid JSON: $err" >&2; return 1; }
+  [ -n "$err" ] && { echo "$err" >&2; return 1; }
+  return 0
+}
+
+[ "${1:-}" = "--check" ] && { validate "$2"; exit; }
+
+# Seed from the devices connected right now, best guess at an order.
+if [ ! -f "$CONF" ]; then
+  mkdir -p "$(dirname "$CONF")"
+  jq -n --rawfile i <("$SAS" -a -t input) --rawfile o <("$SAS" -a -t output) \
+    '{input: ($i|rtrimstr("\n")|split("\n")), output: ($o|rtrimstr("\n")|split("\n"))}' >"$CONF"
+  echo "created $CONF from your connected devices — reorder so most-preferred is first"
+fi
+
+while true; do
+  "${EDITOR:-nvim}" "$CONF"
+  validate "$CONF" && break
+  read -rp "config is not valid. edit again? [Y/n] " a
+  [[ "$a" =~ ^[Nn] ]] && { echo "nothing applied" >&2; exit 1; }
+done
+
+# ponytail: warn, don't block — a device you own but unplugged is a legitimate entry.
+comm -23 <(jq -r '.input[], .output[]' "$CONF" | sort -u) \
+         <({ "$SAS" -a -t input; "$SAS" -a -t output; } | sort -u) |
+  sed 's/^/  not currently connected: /'
+
+launchctl kickstart -k "gui/$(id -u)/$AGENT" && echo "applied"
