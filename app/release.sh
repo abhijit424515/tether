@@ -18,7 +18,8 @@ plutil -replace CFBundleVersion -string "$VERSION" "$APP/Contents/Info.plist"
 # Editing Info.plist invalidates the signature, so sign after stamping, not before.
 codesign --force --sign - "$APP"
 
-ZIP="build/Tether-$VERSION.zip"
+# Artifact names are lowercase; Tether with a capital T is for branding only.
+ZIP="build/tether-$VERSION.zip"
 rm -f "$ZIP"
 # ditto, not zip: it preserves the bundle's symlinks and resource forks.
 ditto -c -k --keepParent "$APP" "$ZIP"
@@ -26,15 +27,39 @@ ditto -c -k --keepParent "$APP" "$ZIP"
 SHA=$(shasum -a 256 "$ZIP" | cut -d' ' -f1)
 
 gh release create "v$VERSION" "$ZIP" \
-  --title "Tether $VERSION" \
-  --notes "Install with:
+  --title "tether $VERSION" \
+  --notes "$(cat <<NOTES
+## Install
 
-    brew tap abhijit424515/dynamight
-    brew install --cask --no-quarantine tether
+\`\`\`sh
+brew install --cask abhijit424515/dynamight/tether
+\`\`\`
 
-The \`--no-quarantine\` flag is required: Tether is ad-hoc signed rather than
-notarized, and Gatekeeper blocks unnotarized apps that carry the quarantine
-attribute Homebrew would otherwise set."
+No flag needed. Earlier notes mentioned \`--no-quarantine\`; that option was
+removed in Homebrew 6, so the cask clears the quarantine attribute itself in a
+postflight step instead.
+
+## What you are trusting
+
+tether is ad-hoc signed, not notarized by Apple. Gatekeeper only inspects files
+carrying the quarantine attribute, so clearing it is what lets the app launch —
+which means you are trusting this source rather than Apple's notary service.
+Every build script is in the repository if you would rather build it yourself:
+
+\`\`\`sh
+git clone https://github.com/abhijit424515/tether.git
+cd tether && ./app/install.sh
+\`\`\`
+
+## Notes
+
+- Requires macOS 13 (Ventura) or later.
+- The Microphone tab shows a live input level, so macOS asks for microphone
+  permission the first time you open that tab. Nothing is recorded, and the mic
+  is opened only while that tab is on screen.
+- Turn on **Open at Login** in the panel to start it with your Mac.
+NOTES
+)"
 
 echo
 echo "released v$VERSION"
