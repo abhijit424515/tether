@@ -1,5 +1,5 @@
-<!-- App icon variant of icon.svg: same gradient artwork, square canvas cropped to the
-     waves. Only the viewBox differs. -->
+<!-- App icon variant of icon.svg: same waves, square canvas cropped around them, with the
+     colours flipped to white on black. The menu bar variant is icon-menubar.svg. -->
 <svg
   width="460"
   height="460"
@@ -7,15 +7,21 @@
   xmlns="http://www.w3.org/2000/svg"
 >
   <defs>
-    <linearGradient id="wave" x1="0" y1="0" x2="512" y2="0">
-      <stop offset="0%" stop-color="#55C7F2"/>
-      <stop offset="100%" stop-color="#3568E8"/>
+    <!-- Near-black, not #000: a pure black tile vanishes into a dark Dock or Finder sidebar.
+         The slight top-to-bottom fall-off also keeps the square from looking like a hole. -->
+    <linearGradient id="tile" x1="0" y1="18" x2="0" y2="478" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#23262B"/>
+      <stop offset="100%" stop-color="#0B0C0E"/>
     </linearGradient>
   </defs>
 
+  <!-- Rounded, not square: macOS draws app icons in a rounded square and a hard-cornered
+       tile reads as foreign next to everything else in Finder. -->
+  <rect x="25" y="18" width="460" height="460" rx="103" ry="103" fill="url(#tile)"/>
+
   <g
     fill="none"
-    stroke="url(#wave)"
+    stroke="#FFFFFF"
     stroke-width="9"
     stroke-linecap="round"
   >
