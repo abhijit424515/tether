@@ -2,10 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Audio Priority</string>
-  <key>CFBundleDisplayName</key><string>Audio Priority</string>
-  <key>CFBundleIdentifier</key><string>com.local.audio-priority.app</string>
-  <key>CFBundleExecutable</key><string>AudioPriority</string>
+  <key>CFBundleName</key><string>Tether</string>
+  <key>CFBundleDisplayName</key><string>Tether</string>
+  <key>CFBundleIdentifier</key><string>com.local.tether</string>
+  <key>CFBundleExecutable</key><string>Tether</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>CFBundleVersion</key><string>1</string>

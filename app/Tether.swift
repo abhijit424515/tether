@@ -1,5 +1,5 @@
-// Menu bar app: keeps macOS audio on the highest-priority connected device.
-// Same config file as the CLI: ~/.config/audio-priority.json
+// Tether — menu bar app that keeps macOS audio on the highest-priority connected device.
+// Same config file as the CLI: ~/.config/tether.json
 // ponytail: one file, no Xcode project. Split it up when it stops fitting on a screen.
 
 import SwiftUI
@@ -91,10 +91,20 @@ enum Audio {
 
 // MARK: - Config
 
-/// ~/.config/audio-priority.json — {"input": [...], "output": [...]}, first connected entry wins.
+/// ~/.config/tether.json — {"input": [...], "output": [...]}, first connected entry wins.
 enum Config {
     static let url = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".config/tether.json")
+
+    /// The config was called audio-priority.json before the app was named Tether.
+    private static let legacyURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".config/audio-priority.json")
+
+    static func migrateLegacy() {
+        let fm = FileManager.default
+        guard !fm.fileExists(atPath: url.path), fm.fileExists(atPath: legacyURL.path) else { return }
+        try? fm.moveItem(at: legacyURL, to: url)
+    }
 
     static func load() -> [Direction: [String]] {
         guard let data = try? Data(contentsOf: url),
@@ -130,6 +140,7 @@ final class Model: ObservableObject {
     private var timer: Timer?
 
     init() {
+        Config.migrateLegacy()
         refresh()
         // ponytail: 2s poll instead of a CoreAudio property listener. Both work; this one is 1 line.
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
@@ -348,13 +359,27 @@ struct PanelView: View {
 
 // MARK: - App
 
+enum Icon {
+    /// Template image: macOS recolors it for light, dark, and highlighted menu bars, so the
+    /// artwork ships as flat black with alpha rather than the gradient in icon.svg.
+    static let menuBar: NSImage = {
+        guard let image = NSImage(named: "MenuBarIcon") else {
+            return NSImage(systemSymbolName: "waveform", accessibilityDescription: "Tether")!
+        }
+        image.isTemplate = true
+        return image
+    }()
+}
+
 @main
-struct AudioPriorityApp: App {
+struct TetherApp: App {
     @StateObject private var model = Model()
 
     var body: some Scene {
-        MenuBarExtra("Audio Priority", systemImage: "headphones") {
+        MenuBarExtra {
             PanelView(model: model)
+        } label: {
+            Image(nsImage: Icon.menuBar)
         }
         .menuBarExtraStyle(.window)
     }

@@ -1,12 +1,12 @@
 #!/bin/bash
-# pai — edit the audio-priority config, validate it, apply it.
-#   pai            edit + validate + reload the launch agent
-#   pai --check F  validate F only (used by test.sh)
+# tether — edit the Tether config, validate it, apply it.
+#   tether            edit + validate + reload the launch agent
+#   tether --check F  validate F only (used by test.sh)
 set -u
 
 SAS=${SAS:-/opt/homebrew/bin/SwitchAudioSource}
-CONF="${AUDIO_PRIORITY_CONF:-$HOME/.config/audio-priority.json}"
-AGENT=com.local.audio-priority
+CONF="${TETHER_CONF:-$HOME/.config/tether.json}"
+AGENT=com.local.tether
 
 # Valid = object with "input" and "output", each an array of non-empty strings.
 validate() {
@@ -28,6 +28,10 @@ validate() {
 }
 
 [ "${1:-}" = "--check" ] && { validate "$2"; exit; }
+
+# The config was called audio-priority.json before the app was named Tether.
+LEGACY="$HOME/.config/audio-priority.json"
+[ -f "$CONF" ] || [ ! -f "$LEGACY" ] || mv "$LEGACY" "$CONF"
 
 # Seed from the devices connected right now, best guess at an order.
 if [ ! -f "$CONF" ]; then

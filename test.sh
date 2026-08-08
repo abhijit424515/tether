@@ -12,18 +12,18 @@ echo "$4" > "$FAKE_SWITCHED"
 EOF
 chmod +x "$TMP/SwitchAudioSource"
 
-sed "s|^SAS=.*|SAS=$TMP/SwitchAudioSource|" "$(dirname "$0")/audio-priority.sh" > "$TMP/run.sh"
+sed "s|^SAS=.*|SAS=$TMP/SwitchAudioSource|" "$(dirname "$0")/tether-agent.sh" > "$TMP/run.sh"
 chmod +x "$TMP/run.sh"
 
 export FAKE_AVAILABLE="$TMP/avail" FAKE_SWITCHED="$TMP/switched"
-export AUDIO_PRIORITY_CONF="$TMP/conf.json"
+export TETHER_CONF="$TMP/conf.json"
 
 check() { # desc, expected ("" = no switch)
   [ "$(cat "$TMP/switched" 2>/dev/null)" = "$2" ] && echo "ok: $1" && return
   echo "FAIL: $1 — wanted '$2', got '$(cat "$TMP/switched" 2>/dev/null)'"; exit 1
 }
 
-echo '{"input":["Good Mic","Cheap Mic"],"output":["Cheap Mic"]}' >"$AUDIO_PRIORITY_CONF"
+echo '{"input":["Good Mic","Cheap Mic"],"output":["Cheap Mic"]}' >"$TETHER_CONF"
 
 printf 'Good Mic\nCheap Mic\n' >"$TMP/avail"; FAKE_CURRENT="Cheap Mic" "$TMP/run.sh" --once
 check "top choice present -> switches" "Good Mic"
@@ -37,15 +37,15 @@ printf 'Unlisted\n' >"$TMP/avail"; FAKE_CURRENT="Unlisted" "$TMP/run.sh" --once
 check "nothing listed is connected -> no switch" ""
 
 rm -f "$TMP/switched"
-echo 'not json' >"$AUDIO_PRIORITY_CONF"
+echo 'not json' >"$TETHER_CONF"
 printf 'Good Mic\n' >"$TMP/avail"; FAKE_CURRENT="Cheap Mic" "$TMP/run.sh" --once
 check "broken config -> no switch, no crash" ""
 
-PAI="$(dirname "$0")/pai"
+TETHER="$(dirname "$0")/tether"
 vcheck() { # desc, json, expected exit
   echo "$2" >"$TMP/v.json"
   local got=0
-  "$PAI" --check "$TMP/v.json" 2>/dev/null || got=$?
+  "$TETHER" --check "$TMP/v.json" 2>/dev/null || got=$?
   [ "$got" = "$3" ] && echo "ok: $1" && return
   echo "FAIL: $1 — wanted exit $3, got $got"; exit 1
 }
