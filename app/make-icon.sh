@@ -19,9 +19,22 @@ rsvg-convert icon-menubar.svg -h "$((HEIGHT * 2))" -o Resources/MenuBarIcon@2x.p
 # .icns wants a specific set of filenames; iconutil rejects the folder otherwise.
 SET=$(mktemp -d)/Tether.iconset
 mkdir -p "$SET"
+
+# The artwork's 9-unit strokes on a 460-unit canvas come out 0.3px wide at 16px, which
+# antialiases to near-white — the small Finder icon looked washed out while Quick Look,
+# rendering the 512px slice, stayed blue. Thicken the stroke for the small slices so every
+# size keeps at least MIN_INK pixels of solid colour. Large slices keep the original 9.
+MIN_INK=1.6
+render() { # size, output
+  local width
+  width=$(awk -v s="$1" -v ink="$MIN_INK" 'BEGIN { w = ink * 460 / s; print (w > 9 ? int(w + 0.5) : 9) }')
+  sed "s/stroke-width=\"9\"/stroke-width=\"$width\"/" icon-app.svg |
+    rsvg-convert -w "$1" -h "$1" -o "$2"
+}
+
 for size in 16 32 128 256 512; do
-  rsvg-convert icon-app.svg -w "$size" -h "$size" -o "$SET/icon_${size}x${size}.png"
-  rsvg-convert icon-app.svg -w "$((size * 2))" -h "$((size * 2))" -o "$SET/icon_${size}x${size}@2x.png"
+  render "$size" "$SET/icon_${size}x${size}.png"
+  render "$((size * 2))" "$SET/icon_${size}x${size}@2x.png"
 done
 iconutil -c icns "$SET" -o Resources/Tether.icns
 rm -rf "$(dirname "$SET")"
