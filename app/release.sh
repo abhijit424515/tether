@@ -26,16 +26,17 @@ ditto -c -k --keepParent "$APP" "$ZIP"
 
 SHA=$(shasum -a 256 "$ZIP" | cut -d' ' -f1)
 
-gh release create "v$VERSION" "$ZIP" \
-  --title "tether $VERSION" \
-  --notes "$(cat <<NOTES
+# The notes go through a file: an inline --notes heredoc puts apostrophes inside a command
+# substitution, which bash's parser refuses.
+NOTES="build/notes-$VERSION.md"
+cat > "$NOTES" <<'NOTES_EOF'
 ## Install
 
-\`\`\`sh
+```sh
 brew install --cask abhijit424515/dynamight/tether
-\`\`\`
+```
 
-No flag needed. Earlier notes mentioned \`--no-quarantine\`; that option was
+No flag needed. Earlier notes mentioned `--no-quarantine`; that option was
 removed in Homebrew 6, so the cask clears the quarantine attribute itself in a
 postflight step instead.
 
@@ -46,10 +47,10 @@ carrying the quarantine attribute, so clearing it is what lets the app launch â€
 which means you are trusting this source rather than Apple's notary service.
 Every build script is in the repository if you would rather build it yourself:
 
-\`\`\`sh
+```sh
 git clone https://github.com/abhijit424515/tether.git
 cd tether && ./app/install.sh
-\`\`\`
+```
 
 ## Notes
 
@@ -58,8 +59,9 @@ cd tether && ./app/install.sh
   permission the first time you open that tab. Nothing is recorded, and the mic
   is opened only while that tab is on screen.
 - Turn on **Open at Login** in the panel to start it with your Mac.
-NOTES
-)"
+NOTES_EOF
+
+gh release create "v$VERSION" "$ZIP" --title "tether $VERSION" --notes-file "$NOTES"
 
 echo
 echo "released v$VERSION"
