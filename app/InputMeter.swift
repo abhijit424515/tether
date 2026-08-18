@@ -15,12 +15,17 @@ final class InputMeter: ObservableObject {
 
     private let engine = AVAudioEngine()
     private var running = false
+    /// Whether the meter is wanted on screen. Distinct from `running`, because a device that
+    /// is still settling leaves the meter wanted but not yet started.
+    private var wanted = false
+    private var retrying = false
 
     /// Level below this counts as silence. Speech sits around -30 dBFS, so a 60 dB window
     /// puts normal talking in the middle of the meter rather than pinned at either end.
     private static let floorDB: Float = -60
 
     func start() {
+        wanted = true
         guard !running else { return }
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
@@ -37,6 +42,7 @@ final class InputMeter: ObservableObject {
     }
 
     func stop() {
+        wanted = false
         guard running else { return }
         running = false
         engine.inputNode.removeTap(onBus: 0)
@@ -47,16 +53,32 @@ final class InputMeter: ObservableObject {
     /// The engine binds to whatever the default input was when it started, so a device
     /// switch means tearing it down and building it again.
     func restart() {
-        guard running else { return }
+        guard wanted else { return }
         stop()
         start()
     }
 
     private func startEngine() {
+        // Two paths reach here — the tab appearing and the permission prompt returning — and
+        // a tap installed twice on one bus is a raised ObjC exception, which is a crash and
+        // not something Swift can catch.
+        guard wanted, !running else { return }
         denied = false
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
-        guard format.sampleRate > 0 else { return }  // no usable input device
+
+        // A device that is halfway through connecting reports a format the engine refuses,
+        // and refuses it by raising rather than returning. Bluetooth reconnects are the case
+        // Tether exists to handle, so wait for the HAL to settle instead of dropping the
+        // meter until the next tab switch.
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            NSLog("input meter: input format not usable yet (%f Hz, %u ch)",
+                  format.sampleRate, format.channelCount)
+            retryLater()
+            return
+        }
+
+        input.removeTap(onBus: 0)  // no-op unless an earlier start left one behind
 
         // 256 frames is ~5ms at 48kHz, against ~21ms for the more usual 1024. The meter is
         // updated once per buffer, so the buffer length is the meter's floor on latency.
@@ -70,6 +92,16 @@ final class InputMeter: ObservableObject {
         } catch {
             NSLog("input meter failed to start: \(error.localizedDescription)")
             input.removeTap(onBus: 0)
+        }
+    }
+
+    private func retryLater() {
+        guard !retrying else { return }
+        retrying = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            retrying = false
+            startEngine()
         }
     }
 

@@ -39,6 +39,17 @@ Priorities live in `~/.config/tether.json`, which you can edit by hand — it is
 }
 ```
 
+## If it crashes
+
+macOS keeps the crash report itself — no logging to turn on.
+
+```sh
+ls -t ~/Library/Logs/DiagnosticReports/Tether-*.ips   # crash reports, newest first
+log show --predicate 'process == "Tether"' --last 1h  # what Tether logged while running
+```
+
+Please open an issue with the report.
+
 ## Without the app
 
 There is also a CLI and a launchd agent doing the same job, if you prefer no GUI. It needs `brew install switchaudio-osx`, and shares the same config file. Run one or the other, not both.
