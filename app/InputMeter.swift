@@ -13,12 +13,23 @@ final class InputMeter: ObservableObject {
     @Published private(set) var level: Float = 0
     @Published private(set) var denied = false
 
-    private let engine = AVAudioEngine()
+    /// Rebuilt on every start rather than kept for the process. An engine stops itself when
+    /// the hardware changes underneath it, and one that has been through that carries the old
+    /// device's state around; a new one binds to whatever is default now.
+    private var engine = AVAudioEngine()
     private var running = false
     /// Whether the meter is wanted on screen. Distinct from `running`, because a device that
     /// is still settling leaves the meter wanted but not yet started.
     private var wanted = false
-    private var retrying = false
+
+    init() {
+        // The engine stops itself when the hardware changes underneath it, so without this the
+        // meter stays dead until the next time the tab is switched away and back.
+        NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange,
+                                               object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.restart() }
+        }
+    }
 
     /// Level below this counts as silence. Speech sits around -30 dBFS, so a 60 dB window
     /// puts normal talking in the middle of the meter rather than pinned at either end.
@@ -64,25 +75,18 @@ final class InputMeter: ObservableObject {
         // not something Swift can catch.
         guard wanted, !running else { return }
         denied = false
+        engine = AVAudioEngine()
         let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
 
-        // A device that is halfway through connecting reports a format the engine refuses,
-        // and refuses it by raising rather than returning. Bluetooth reconnects are the case
-        // Tether exists to handle, so wait for the HAL to settle instead of dropping the
-        // meter until the next tab switch.
-        guard format.sampleRate > 0, format.channelCount > 0 else {
-            NSLog("input meter: input format not usable yet (%f Hz, %u ch)",
-                  format.sampleRate, format.channelCount)
-            retryLater()
-            return
-        }
-
-        input.removeTap(onBus: 0)  // no-op unless an earlier start left one behind
-
-        // 256 frames is ~5ms at 48kHz, against ~21ms for the more usual 1024. The meter is
-        // updated once per buffer, so the buffer length is the meter's floor on latency.
-        input.installTap(onBus: 0, bufferSize: 256, format: format) { [weak self] buffer, _ in
+        // A nil format, rather than the node's own: inputNode reports a flat 44100 whatever the
+        // hardware is really running at, and handing that back as the client format is what
+        // raised "Format mismatch: input hw 16000 Hz, client format 44100 Hz" and took the app
+        // down. Passing nil leaves AVFAudio to resolve the bus format, so there is no second
+        // copy of it to disagree with the device.
+        //
+        // bufferSize is a hint the input hardware is free to ignore — it hands over about
+        // 100ms at a time here — so the meter updates at the rate the device feeds it.
+        input.installTap(onBus: 0, bufferSize: 256, format: nil) { [weak self] buffer, _ in
             let value = Self.level(of: buffer)
             Task { @MainActor in self?.absorb(value) }
         }
@@ -95,19 +99,10 @@ final class InputMeter: ObservableObject {
         }
     }
 
-    private func retryLater() {
-        guard !retrying else { return }
-        retrying = true
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(400))
-            retrying = false
-            startEngine()
-        }
-    }
-
     /// Instant to rise, damped on the way down — a meter that decays as fast as it climbs
-    /// reads as noise. The 0.55 keeps the fall around 40ms, slow enough to be readable and
-    /// fast enough that the meter does not visibly trail the voice.
+    /// reads as noise. The 0.55 puts the fall a few buffers behind the rise, so at the ~100ms
+    /// buffers the input hardware actually delivers it trails the voice by about a third of a
+    /// second: readable, and not obviously lagging.
     private func absorb(_ value: Float) {
         level = value > level ? value : level * 0.55 + value * 0.45
     }
